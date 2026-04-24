@@ -1,0 +1,160 @@
+[project]
+name = "coffee-ordering"
+version = "0.1.0"
+description = "Intelligent coffee ordering automation tool"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "click>=8.1.0",
+    "rich>=13.7.0",
+    "playwright>=1.40.0",
+    "polars>=1.39.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+coffee-order = "coffee_ordering.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coffee_ordering"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.1",
+]
+
+[tool.ruff]
+# Set the maximum line length
+line-length = 100
+indent-width = 4
+
+# Assume Python 3.13
+target-version = "py313"
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+# Enable specific rule sets
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort (import sorting)
+    "N",     # pep8-naming
+    "UP",    # pyupgrade (modern Python syntax)
+    "B",     # flake8-bugbear (common bugs)
+    "C4",    # flake8-comprehensions
+    "DTZ",   # flake8-datetimez (timezone aware datetimes)
+    "T10",   # flake8-debugger (no debugger statements)
+    "EM",    # flake8-errmsg (error message formatting)
+    "ISC",   # flake8-implicit-str-concat
+    "ICN",   # flake8-import-conventions
+    "PIE",   # flake8-pie (misc lints)
+    "PT",    # flake8-pytest-style
+    "Q",     # flake8-quotes
+    "RSE",   # flake8-raise (raise statement improvements)
+    "RET",   # flake8-return (return statement improvements)
+    "SIM",   # flake8-simplify
+    "TID",   # flake8-tidy-imports
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "PL",    # pylint
+    "RUF",   # ruff-specific rules
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "PLR0913", # too many arguments
+    "PLR2004", # magic value in comparison
+    "ISC001",  # implicit string concatenation (conflicts with formatter)
+]
+
+# Allow fix for all enabled rules (when `--fix` is provided)
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore certain rules in test files
+"tests/**/*.py" = [
+    "ARG",     # unused arguments (fixtures)
+    "PLR2004", # magic values
+]
+# Ignore certain rules in scripts
+"scripts/**/*.py" = [
+    "T10",     # allow debugger in scripts
+    "ARG",     # unused arguments
+]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Respect magic trailing comma
+skip-magic-trailing-comma = false
+
+# Auto-detect line ending
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+# Organize imports
+known-first-party = ["coffee_ordering"]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.lint.pydocstyle]
+# Use Google-style docstrings
+convention = "google"
+
+[tool.pytest.ini_options]
+# Pytest configuration
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Output options
+addopts = [
+    "-v",                    # Verbose output
+    "--strict-markers",      # Strict marker checking
+    "--tb=short",            # Shorter traceback format
+    "--color=yes",           # Colored output
+]
+
+# Markers for organizing tests
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow running tests",
+]
+
+# Coverage options (if pytest-cov is installed)
+# addopts = ["-v", "--cov=coffee_ordering", "--cov-report=term-missing"]
