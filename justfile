@@ -1,15 +1,18 @@
+RUN_UV := 'uv run --env-file .env'
 CLI := 'uv run --env-file .env -m coffee_ordering.cli'
 
-roaster := 'dosmundos'
-date := '2026-04-03'
+roaster := 'doubleshot'
+# roaster := 'dosmundos'
+date := '2026-06-05'
 
 run:
     @just list-products
     auggie --print --instruction-file instruction.txt
+    @just run-aggregates
     @just add-to-cart
 
 run-aggregates:
-    uv run scripts/aggregates.py --date {{date}} --roaster {{roaster}}
+    {{RUN_UV}} scripts/aggregates.py --date {{date}} --roaster {{roaster}}
 
 list-products:
     {{CLI}} list-products --roaster {{roaster}} > orders/{{date}}/products.txt

@@ -173,7 +173,7 @@ def list_products(roaster: Optional[str]) -> None:
 
     with roaster_class() as client:
         # Authenticate if credentials are available
-        client.authenticate()
+        assert client.authenticate(), "Failed to authenticate"
 
         products = client.get_products()
 

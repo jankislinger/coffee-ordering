@@ -63,6 +63,7 @@ def main() -> None:
     print(f"📦 Fetching products from {args.roaster}...")
     roaster_class = get_roaster_client(args.roaster)
     with roaster_class(headless=True) as client:
+        assert client.authenticate(), f"Failed to authenticate with {client.__class__.__name__}"
         products = client.get_products()
 
     print(f"✓ Got {len(products)} products")
@@ -71,12 +72,15 @@ def main() -> None:
     orders_df = create_orders_dataframe(orders)
     products_df = create_products_dataframe(products)
 
-    # Join orders with products
+    # Join orders with products (inner join excludes unmatched)
     shopping_df = join_orders_with_products(orders_df, products_df)
+
+    # Find unmatched orders
+    unmatched_df = find_unmatched_orders(orders_df, products_df)
 
     # Generate outputs
     shopping_list_txt = generate_shopping_list_txt(shopping_df)
-    markdown_output = generate_markdown_tables(shopping_df, args.date, args.roaster)
+    markdown_output = generate_markdown_tables(shopping_df, unmatched_df, args.date, args.roaster)
 
     # Save outputs
     shopping_list_file = orders_dir / "shopping_list.txt"
@@ -131,12 +135,12 @@ def extract_weight_kg(variant_name: str) -> float:
 
 
 def join_orders_with_products(orders_df: pl.DataFrame, products_df: pl.DataFrame) -> pl.DataFrame:
-    """Join orders with product details."""
-    # Join on both product_id and variant_id
+    """Join orders with product details using inner join to exclude unmatched orders."""
+    # Join on both product_id and variant_id (inner join to exclude unmatched)
     joined = orders_df.join(
         products_df,
         on=["product_id", "variant_id"],
-        how="left"
+        how="inner"
     )
 
     # Calculate totals
@@ -146,6 +150,21 @@ def join_orders_with_products(orders_df: pl.DataFrame, products_df: pl.DataFrame
     ])
 
     return joined
+
+
+def find_unmatched_orders(orders_df: pl.DataFrame, products_df: pl.DataFrame) -> pl.DataFrame:
+    """Find orders that don't match any product in the catalog."""
+    # Left join to keep all orders
+    left_joined = orders_df.join(
+        products_df,
+        on=["product_id", "variant_id"],
+        how="left"
+    )
+
+    # Filter for rows where product_name is null (no match found)
+    unmatched = left_joined.filter(pl.col("product_name").is_null())
+
+    return unmatched
 
 
 def generate_shopping_list_txt(shopping_df: pl.DataFrame) -> str:
@@ -162,7 +181,7 @@ def generate_shopping_list_txt(shopping_df: pl.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def generate_markdown_tables(shopping_df: pl.DataFrame, order_date: str, roaster: str) -> str:
+def generate_markdown_tables(shopping_df: pl.DataFrame, unmatched_df: pl.DataFrame, order_date: str, roaster: str) -> str:
     """Generate markdown with shopping list and per-person aggregates."""
     lines = []
 
@@ -188,6 +207,19 @@ def generate_markdown_tables(shopping_df: pl.DataFrame, order_date: str, roaster
     lines.append("")
     lines.extend(generate_person_aggregates_table(shopping_df))
     lines.append("")
+
+    # Person-Product-Variant aggregates
+    lines.append("## Person-Product-Variant Aggregates")
+    lines.append("")
+    lines.extend(generate_person_product_variant_table(shopping_df))
+    lines.append("")
+
+    # Unmatched orders (if any)
+    if len(unmatched_df) > 0:
+        lines.append("## Unmatched Orders")
+        lines.append("")
+        lines.extend(generate_unmatched_orders_table(unmatched_df))
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -350,6 +382,63 @@ def generate_person_aggregates_table(shopping_df: pl.DataFrame) -> list[str]:
         cfg.set_tbl_rows(-1)  # Show all rows, don't truncate
         cfg.set_fmt_str_lengths(100)  # Don't truncate long strings
         markdown = repr(full_df)
+
+    # Split into lines and return
+    return markdown.strip().split('\n')
+
+
+def generate_person_product_variant_table(shopping_df: pl.DataFrame) -> list[str]:
+    """Generate table with person-product-variant aggregates."""
+    # Aggregate by person, product, and variant
+    aggregated = shopping_df.group_by(["person", "product_name", "variant_name"]).agg([
+        pl.col("quantity").sum().alias("quantity"),
+        pl.col("total_weight_kg").sum().alias("total_weight_kg"),
+        pl.col("total_price").sum().alias("total_price"),
+    ]).sort("person", "product_name", "variant_name")
+
+    # Select and format columns for display
+    display_df = aggregated.select([
+        pl.col("person").alias("Person"),
+        pl.col("product_name").alias("Product"),
+        pl.col("variant_name").alias("Variant"),
+        pl.col("quantity").cast(pl.String).alias("Quantity"),
+        (pl.col("total_weight_kg").round(2).cast(pl.String) + " kg").alias("Weight"),
+        (pl.col("total_price").round(2).cast(pl.String) + " Kč").alias("Price"),
+    ])
+
+    # Generate markdown using Polars
+    with pl.Config() as cfg:
+        cfg.set_tbl_formatting('ASCII_MARKDOWN')
+        cfg.set_tbl_hide_dataframe_shape(True)
+        cfg.set_tbl_hide_column_data_types(True)
+        cfg.set_tbl_rows(-1)  # Show all rows, don't truncate
+        cfg.set_fmt_str_lengths(100)  # Don't truncate long strings
+        markdown = repr(display_df)
+
+    # Split into lines and return
+    return markdown.strip().split('\n')
+
+
+def generate_unmatched_orders_table(unmatched_df: pl.DataFrame) -> list[str]:
+    """Generate table showing orders that didn't match any product."""
+    # Sort first, then select and rename columns for display
+    sorted_df = unmatched_df.sort("person", "product_id")
+
+    display_df = sorted_df.select([
+        pl.col("person").alias("Person"),
+        pl.col("product_id").alias("Product ID"),
+        pl.col("variant_id").alias("Variant ID"),
+        pl.col("quantity").cast(pl.String).alias("Quantity"),
+    ])
+
+    # Generate markdown using Polars
+    with pl.Config() as cfg:
+        cfg.set_tbl_formatting('ASCII_MARKDOWN')
+        cfg.set_tbl_hide_dataframe_shape(True)
+        cfg.set_tbl_hide_column_data_types(True)
+        cfg.set_tbl_rows(-1)  # Show all rows, don't truncate
+        cfg.set_fmt_str_lengths(100)  # Don't truncate long strings
+        markdown = repr(display_df)
 
     # Split into lines and return
     return markdown.strip().split('\n')

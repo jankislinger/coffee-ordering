@@ -40,11 +40,14 @@ class RoasterClient(ABC):
         """
 
     @abstractmethod
-    def authenticate(self) -> None:
+    def authenticate(self) -> bool:
         """
         Authenticate with the roaster's website.
 
         Uses credentials from instance variables (e.g., self.username, self.password).
+
+        Returns:
+            True if authentication was successful, False otherwise
         """
 
     @abstractmethod

@@ -274,15 +274,18 @@ class DosMundosClient(RoasterClient):
 
         return f"{self.BASE_URL}/kosik/"
 
-    def authenticate(self) -> None:
+    def authenticate(self) -> bool:
         """
         Authenticate with Dos Mundos website.
 
         Uses username and password from instance variables (self.username, self.password).
         This implementation uses browser automation to bypass bot detection.
+
+        Returns:
+            True if authentication was successful, False otherwise
         """
         if not self.username or not self.password:
-            return
+            return False
 
         try:
             # Navigate to login page
@@ -327,15 +330,19 @@ class DosMundosClient(RoasterClient):
                 current_url = self.page.url
                 if "/prihlaseni/" in current_url:
                     print("Warning: Login may have failed (still on login page)")
+                    return False
                 else:
                     print(f"✓ Successfully authenticated as {self.username}")
+                    return True
 
             except Exception as e:
                 print(f"Warning: JavaScript form submission failed: {e}")
                 print("Login may not work - continuing anyway")
+                return False
 
         except Exception as e:
             print(f"Authentication error: {e}")
+            return False
 
     def get_cart_url(self) -> str:
         """

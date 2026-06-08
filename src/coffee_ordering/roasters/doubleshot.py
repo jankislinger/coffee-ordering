@@ -133,8 +133,8 @@ class DoubleShotClient(RoasterClient):
                 continue
 
             # Get packaging and purchase_type from variant
-            packaging = "300g"  # Default
-            purchase_type = "one-time"  # Default
+            packaging = None  # Default
+            purchase_type = None  # Default
 
             # If variant_id is provided, extract packaging/purchase_type from page
             if item.variant_id:
@@ -148,11 +148,17 @@ class DoubleShotClient(RoasterClient):
             # Build form data
             form_data = {
                 "clearCart": "0",
-                "sylius_add_to_cart[cartItem][variant][purchaseType]": purchase_type,
-                "sylius_add_to_cart[cartItem][variant][packaging]": packaging,
                 "sylius_add_to_cart[cartItem][quantity]": str(item.quantity),
                 "sylius_add_to_cart[_token]": csrf_token,
             }
+
+            if packaging and purchase_type:
+                form_data.update({
+                "sylius_add_to_cart[cartItem][variant][purchaseType]": purchase_type,
+                "sylius_add_to_cart[cartItem][variant][packaging]": packaging,
+                })
+            else:
+                form_data["sylius_add_to_cart[cartItem][variant]"] = item.variant_id
 
             # Submit the form
             # The action is relative, so we need to construct the full URL
@@ -175,14 +181,17 @@ class DoubleShotClient(RoasterClient):
 
         return f"{self.BASE_URL}/en/cart/"
 
-    def authenticate(self) -> None:
+    def authenticate(self) -> bool:
         """
         Authenticate with DoubleShot website.
 
         Uses username and password from instance variables (self.username, self.password).
+
+        Returns:
+            True if authentication was successful, False otherwise
         """
         if not self.username or not self.password:
-            return
+            return False
 
         try:
             # Get the login page to extract CSRF token
@@ -196,7 +205,7 @@ class DoubleShotClient(RoasterClient):
             csrf_input = soup.select_one('input[name="_csrf_shop_security_token"]')
             if not csrf_input:
                 print("Warning: Could not find CSRF token for login")
-                return
+                return False
 
             csrf_token = csrf_input.get("value", "")
 
@@ -221,11 +230,14 @@ class DoubleShotClient(RoasterClient):
             # If successful, we should be redirected away from login page
             if "/login" in response.url:
                 print("Warning: Login may have failed (still on login page)")
+                return False
             else:
                 print(f"Successfully authenticated as {self.username}")
+                return True
 
         except Exception as e:
             print(f"Authentication error: {e}")
+            return False
 
     def get_cart_url(self) -> str:
         """
@@ -312,6 +324,45 @@ class DoubleShotClient(RoasterClient):
                             },
                         )
                         variants.append(variant)
+
+            # If no variants found from #sylius-variants-pricing, try the price div
+            if not variants:
+                price_div = soup.select_one('div[id^="product-price-"]')
+                if price_div:
+                    price_spans = price_div.select('span[data-variant]:not(.is-unavailable)')
+                    seen_variant_ids = set()  # Track seen variant IDs to avoid duplicates
+
+                    for span in price_spans:
+                        variant_id = span.get('data-variant', '')
+                        packaging = span.get('data-option-packaging', '')
+                        price_cents = span.get('data-variant-pricecents', '0')
+
+                        # Skip subscription variants (contain '_recurrent')
+                        if '_recurrent' in variant_id:
+                            continue
+
+                        # Skip if we've already seen this variant ID (quantity-based pricing)
+                        if variant_id in seen_variant_ids:
+                            continue
+
+                        # Convert price from cents to Kč
+                        try:
+                            price = Decimal(price_cents) / 100
+                        except (ValueError, ArithmeticError):
+                            price = Decimal("0")
+
+                        if price > 0 and variant_id:
+                            seen_variant_ids.add(variant_id)
+                            variant = Variant(
+                                id=variant_id,
+                                name=packaging or variant_id,
+                                price=price,
+                                attributes={
+                                    "packaging": packaging,
+                                    "purchase_type": "one-time",
+                                },
+                            )
+                            variants.append(variant)
 
             # Check availability
             available = len(variants) > 0
