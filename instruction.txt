@@ -1,9 +1,0 @@
-Create structured list of items to order.
-
-Source file:
-- raw text with coffee to order: @orders/2026-06-05/raw_orders.txt
-- list of products from the selected roaster: @orders/2026-06-05/products.txt
-
-Output:
-- json file at @orders/2026-06-05/orders.json
-- keys: person (str), product_id (str), variant_id (str), quantity (int)
