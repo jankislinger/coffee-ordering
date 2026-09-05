@@ -1,22 +1,18 @@
 # Coffee Ordering Tool ☕
 
-An intelligent automation tool that takes your unstructured coffee shopping list and automatically orders from your favorite coffee roasters. Using LLM-powered product matching, it maps your casual descriptions to actual products and adds them to your cart.
+An automation tool that takes a structured coffee shopping list and adds the specified products to your cart at supported coffee roasters.
 
 ## Features
 
-- 📝 **Natural Language Shopping Lists**: Write your shopping list in plain text, no structured format needed
-- 🤖 **AI-Powered Matching**: Uses LLMs to intelligently match your items to actual products
-- 🛒 **Automated Cart Management**: Automatically adds matched products to the roaster's shopping cart
-- 🔌 **Extensible Architecture**: Built to support multiple coffee roasters (currently supports doubleshot.cz)
-- 💾 **Smart Caching**: Caches product catalogs to minimize API calls
-- ✅ **Confidence Scoring**: Shows match confidence and allows review before ordering
+- 🛒 **Automated Cart Management**: Automatically adds specified products to the roaster's shopping cart
+- 🔌 **Extensible Architecture**: Built to support multiple coffee roasters (currently supports doubleshot.cz and dos-mundos.cz)
+- 💾 **Smart Caching**: Caches product catalogs to minimize scraping
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.13 or higher
-- API key for OpenAI or Anthropic (for LLM matching)
 - Account with supported roaster (optional, for cart management)
 
 ### Installation
@@ -38,134 +34,91 @@ playwright install chromium
 Create a `.env` file in the project root:
 
 ```env
-OPENAI_API_KEY=your_api_key_here
-COFFEE_ROASTER=doubleshot
+ROASTER=doubleshot
 DOUBLESHOT_USERNAME=your_username  # Optional
 DOUBLESHOT_PASSWORD=your_password  # Optional
-```
-
-Or use a configuration file `coffee-ordering.yaml`:
-
-```yaml
-roaster: doubleshot
-llm:
-  provider: openai
-  model: gpt-4
-  temperature: 0.1
-cache:
-  enabled: true
-  ttl: 3600
+DOSMUNDOS_USERNAME=your_username   # Optional
+DOSMUNDOS_PASSWORD=your_password   # Optional
 ```
 
 ### Usage
 
-#### Basic Usage
-
-Create a shopping list file `shopping-list.txt`:
-
-```
-2x Ethiopian Natural 250g
-1 Colombian washed, whole beans
-Kenya AA medium roast 500g
-```
-
-Run the tool:
+#### List Available Products
 
 ```bash
-coffee-order --list shopping-list.txt
+coffee-order list-products --roaster doubleshot
+coffee-order list-products --roaster dosmundos
 ```
 
-#### Interactive Mode
+#### Add to Cart
+
+Create a shopping list file `shopping-list.txt` using the structured format `product_id|variant_id|quantity`:
+
+```
+548|25011001_300|2
+1100|032041502_1000|1
+```
+
+Run the tool (always prompts for confirmation before adding to cart):
 
 ```bash
-coffee-order --interactive
+coffee-order add-to-cart --list shopping-list.txt
 ```
 
 #### Direct Input
 
 ```bash
-coffee-order --items "Ethiopian 250g" "Colombian washed"
+coffee-order add-to-cart --items "548|25011001_300|2" --items "1100|032041502_1000|1"
 ```
-
-#### Review Before Adding to Cart
-
-```bash
-coffee-order --list shopping-list.txt --review
-```
-
-This will show you the matched products and ask for confirmation before adding to cart.
 
 ## Example Workflow
 
-1. **Create your shopping list** (any format works):
-   ```
-   - 2 bags of that Ethiopian natural process
-   - Colombian, washed, whole beans
-   - Kenya AA if they have it, 500g
-   ```
-
-2. **Run the tool**:
+1. **List available products** to find product and variant IDs:
    ```bash
-   coffee-order --list my-list.txt --review
+   coffee-order list-products --roaster doubleshot
    ```
 
-3. **Review the matches**:
+2. **Create your shopping list** in `product_id|variant_id|quantity` format:
    ```
-   ✓ Matched: "Ethiopian natural process" → Ethiopia Guji Natural 250g ($18.50) [Confidence: 95%]
-   ✓ Matched: "Colombian, washed, whole beans" → Colombia Huila Washed 250g ($16.00) [Confidence: 92%]
-   ✓ Matched: "Kenya AA 500g" → Kenya Nyeri AA 500g ($32.00) [Confidence: 98%]
-
-   Total: $67.00
-
-   Proceed with adding to cart? [y/N]:
+   548|25011001_300|2
+   1100|032041502_1000|1
    ```
 
-4. **Confirm and checkout**:
+3. **Run the tool** and confirm when prompted:
+   ```bash
+   coffee-order add-to-cart --list my-list.txt
    ```
-   ✓ Added 3 items to cart
-   🛒 Cart URL: https://doubleshot.cz/cart
-   ```
+
+4. **Complete checkout** by visiting the cart URL printed after items are added.
 
 ## Supported Roasters
 
 - ✅ **doubleshot.cz** - Fully supported (requests-based)
-- ✅ **dos-mundos.cz** - Fully supported (requests + browser automation)
-  - Requests-based client: Fast scraping, no auth
-  - Browser-based client: Full authentication support
+- ✅ **dos-mundos.cz** - Fully supported (browser automation via Playwright)
 - 🚧 More roasters coming soon!
 
 ### Selecting Clients Dynamically
 
-Use `get_roaster_client()` to dynamically select between standard and browser-based clients:
+Use `get_roaster_client()` to get a roaster client class by name:
 
 ```python
 from coffee_ordering.roasters import get_roaster_client
 
-# Fast standard client (for browsing)
 ClientClass = get_roaster_client("dosmundos")
 client = ClientClass()
-
-# Browser client (for authentication)
-ClientClass = get_roaster_client("dosmundos", use_browser=True)
-client = ClientClass(headless=True)
-client.authenticate()  # Actually works!
 ```
 
-See [docs/GET_ROASTER_CLIENT.md](docs/GET_ROASTER_CLIENT.md) for details.
+### Dos Mundos Client
 
-### Dos Mundos Browser Client
-
-The Dos Mundos roastery uses Shoptet platform with bot detection. For authentication, use the browser-based client:
+The Dos Mundos roastery uses Shoptet platform with bot detection. The client uses browser automation (Playwright):
 
 ```python
-from coffee_ordering.roasters import DosMundosBrowserClient
+from coffee_ordering.roasters import DosMundosClient
 
-with DosMundosBrowserClient(headless=True) as client:
-    client.authenticate()  # Actually works!
+with DosMundosClient(headless=True) as client:
+    client.authenticate()
     products = client.get_products()
 ```
-
-See [docs/DOS_MUNDOS_BROWSER_CLIENT.md](docs/DOS_MUNDOS_BROWSER_CLIENT.md) for more details.
 
 ## Project Structure
 
@@ -176,21 +129,17 @@ coffee-ordering/
 │       ├── __init__.py
 │       ├── cli.py              # Command-line interface
 │       ├── parser.py           # Shopping list parser
-│       ├── matcher.py          # LLM-based product matcher
 │       ├── cart.py             # Cart management
 │       ├── roasters/
 │       │   ├── __init__.py
 │       │   ├── base.py         # Abstract roaster client
-│       │   └── doubleshot.py   # DoubleShot implementation
+│       │   ├── doubleshot.py   # DoubleShot implementation
+│       │   └── dosmundos.py    # Dos Mundos implementation
 │       ├── models.py           # Data models
-│       ├── config.py           # Configuration management
-│       └── py.typed            # Type checking marker
+│       └── config.py           # Configuration management
 ├── tests/                      # Test suite
 ├── scripts/                    # Utility scripts
-├── docs/                       # Documentation
-│   ├── DESIGN.md              # Architecture documentation
-│   ├── API_FINDINGS.md        # API exploration results
-│   └── EXPLORATION_SUMMARY.md # Exploration summary
+├── orders/                     # Per-round order data
 ├── README.md
 └── pyproject.toml
 ```
@@ -210,19 +159,9 @@ uv sync
 
 ### Running Tests
 
-The project uses pytest for testing. You can run tests in several ways:
+The project uses pytest for testing:
 
 ```bash
-# Run all tests
-make test
-
-# Run tests with verbose output
-make test-v
-
-# Run tests with coverage report (requires pytest-cov)
-make test-cov
-
-# Or use pytest directly
 uv run pytest
 uv run pytest -v
 uv run pytest tests/test_parser.py  # Run specific test file
@@ -233,30 +172,9 @@ uv run pytest tests/test_parser.py  # Run specific test file
 The project uses ruff for linting and formatting:
 
 ```bash
-# Format code
-make format
-
-# Run linter
-make lint
-
-# Fix linting issues automatically
-make fix
-
-# Run all checks (format + lint + test)
-make all
-
-# Or use ruff directly
 uv run ruff format src/ tests/
 uv run ruff check src/ tests/
 uv run ruff check --fix src/ tests/
-```
-
-### Available Make Commands
-
-Run `make help` to see all available commands:
-
-```bash
-make help
 ```
 
 ### Adding a New Roaster
@@ -267,32 +185,25 @@ make help
    - `get_products()`
    - `add_to_cart()`
    - `authenticate()`
-4. Register in the roaster registry
-
-See `docs/DESIGN.md` for detailed architecture documentation.
+   - `get_cart_url()`
+   - `close()`
+4. Register the new class in the `ROASTERS` dict in `src/coffee_ordering/roasters/__init__.py`
 
 ## Configuration Options
 
-| Option | Environment Variable | Config File | Description |
-|--------|---------------------|-------------|-------------|
-| Roaster | `COFFEE_ROASTER` | `roaster` | Default roaster to use |
-| LLM Provider | `LLM_PROVIDER` | `llm.provider` | openai or anthropic |
-| LLM Model | `LLM_MODEL` | `llm.model` | Model name (e.g., gpt-4) |
-| API Key | `OPENAI_API_KEY` | - | LLM API key |
-| Cache Enabled | `CACHE_ENABLED` | `cache.enabled` | Enable product caching |
-| Cache TTL | `CACHE_TTL` | `cache.ttl` | Cache lifetime in seconds |
+| Option | Environment Variable | Description |
+|--------|---------------------|-------------|
+| Roaster | `ROASTER` | Default roaster to use |
+| DoubleShot Username | `DOUBLESHOT_USERNAME` | DoubleShot login email |
+| DoubleShot Password | `DOUBLESHOT_PASSWORD` | DoubleShot password |
+| Dos Mundos Username | `DOSMUNDOS_USERNAME` | Dos Mundos login email |
+| Dos Mundos Password | `DOSMUNDOS_PASSWORD` | Dos Mundos password |
 
 ## Troubleshooting
 
 ### "No products found"
 - Check your internet connection
 - Verify the roaster's website is accessible
-- Try clearing the cache: `coffee-order --clear-cache`
-
-### "Low confidence matches"
-- Be more specific in your shopping list
-- Include product details like origin, process, size
-- Use the `--review` flag to manually verify matches
 
 ### "Authentication failed"
 - Verify your credentials in `.env` file
@@ -310,7 +221,7 @@ Contributions are welcome! Please:
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License
 
 ## Roadmap
 
